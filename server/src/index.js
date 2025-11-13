@@ -5,6 +5,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import ltxRoutes from "../routes/ltx.js";
+import ltxRoutesNew from "../routes/ltxRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -12,7 +13,7 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5174";
 
 const corsOptions = {
   origin: CLIENT_ORIGIN,
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type"]
 };
 
@@ -27,6 +28,7 @@ const outputsDir = path.join(process.cwd(), "outputs");
 app.use("/outputs", express.static(outputsDir));
 
 app.use("/api", ltxRoutes);
+app.use("/api/ltx", ltxRoutesNew);
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
