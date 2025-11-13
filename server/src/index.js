@@ -1,0 +1,34 @@
+import dotenv from "dotenv";
+dotenv.config({ override: true });
+
+import express from "express";
+import cors from "cors";
+import path from "path";
+import ltxRoutes from "../routes/ltx.js";
+
+const app = express();
+const PORT = process.env.PORT || 4000;
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5174";
+
+const corsOptions = {
+  origin: CLIENT_ORIGIN,
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"]
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+app.use(express.json({ limit: "50mb" }));
+
+const tmpDir = path.join(process.cwd(), "tmp");
+app.use("/tmp", express.static(tmpDir));
+const outputsDir = path.join(process.cwd(), "outputs");
+app.use("/outputs", express.static(outputsDir));
+
+app.use("/api", ltxRoutes);
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log("CORS allowed for:", CLIENT_ORIGIN);
+});

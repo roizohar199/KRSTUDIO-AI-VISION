@@ -1,0 +1,44 @@
+# General
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+*.tmp
+*.swp
+
+# Environment / credentials
+.env
+.env.local
+.env.*
+!.env.example
+
+# Node installs
+node_modules/
+client/node_modules/
+server/node_modules/
+package-lock.json
+client/package-lock.json
+server/package-lock.json
+
+# Build outputs
+dist/
+build/
+client/dist/
+server/dist/
+outputs/
+server/outputs/
+
+# Temporary assets
+tmp/
+*.mp4
+*.wav
+*.mp3
+*.srt
+*.txt
+!lyrics.example.txt
+
+# Coverage / testing
+coverage/
+.nyc_output/
+
