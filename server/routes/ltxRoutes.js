@@ -38,8 +38,15 @@ function writeHistory(items) {
 
 // POST /api/ltx/generate
 router.post("/generate", async (req, res) => {
-  const { prompt, num_frames, width, height, fps, num_inference_steps } =
-    req.body || {};
+  const {
+    prompt,
+    num_frames,
+    width,
+    height,
+    fps,
+    num_inference_steps,
+    image_base64,
+  } = req.body || {};
 
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
@@ -53,6 +60,7 @@ router.post("/generate", async (req, res) => {
       height: height ?? 512,
       fps: fps ?? 24,
       num_inference_steps: num_inference_steps ?? 28,
+      image_base64: image_base64 ?? null,
     };
 
     const response = await fetch(`${RUNPOD_LTX_BASE_URL}/generate`, {
@@ -69,17 +77,18 @@ router.post("/generate", async (req, res) => {
         .json({ error: "LTX backend failed", status: response.status });
     }
 
-    const data = await response.json(); // { file, url: "/videos/..." }
+    const data = await response.json(); // { file, url, used_image }
     const fullUrl = `${RUNPOD_LTX_BASE_URL}${data.url}`;
 
     const history = readHistory();
-    const id = Date.now().toString(); // אפשר גם uuid
+    const id = Date.now().toString();
     const record = {
       id,
       prompt,
       file: data.file,
       url: fullUrl,
       createdAt: new Date().toISOString(),
+      used_image: !!data.used_image,
       params: body,
     };
     history.unshift(record); // האחרון למעלה

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL 
-  ? `${import.meta.env.VITE_API_BASE_URL}/api/ltx`
-  : "http://localhost:4100/api/ltx";
+// DEV: פונה לשרת לוקאלי
+// PROD: פונה לנתיב יחסי בדומיין (nginx יעביר ל-Node)
+const API_BASE =
+  import.meta.env.DEV ? "http://localhost:4100/api/ltx" : "/api/ltx";
 
 export default function LtxPage() {
   const [prompt, setPrompt] = useState(
@@ -13,6 +14,9 @@ export default function LtxPage() {
   const [numFrames, setNumFrames] = useState(81);
   const [fps, setFps] = useState(24);
   const [steps, setSteps] = useState(28);
+
+  const [imagePreview, setImagePreview] = useState(null);
+  const [imageBase64, setImageBase64] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -36,6 +40,23 @@ export default function LtxPage() {
     fetchHistory();
   }, []);
 
+  function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setImagePreview(null);
+      setImageBase64(null);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      setImagePreview(result); // תצוגה מקדימה
+      setImageBase64(result); // נשלח כ-base64 לשרת
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function handleGenerate() {
     setLoading(true);
     setError("");
@@ -51,6 +72,7 @@ export default function LtxPage() {
           num_frames: numFrames,
           fps,
           num_inference_steps: steps,
+          image_base64: imageBase64,
         }),
       });
 
@@ -127,7 +149,7 @@ export default function LtxPage() {
             KRSTUDIO AI VISION – LTX Video
           </h1>
           <p style={{ opacity: 0.8 }}>
-            מייצר וידאו קולנועי מהפרומפט שלך דרך שרת ה-LTX ב-RunPod.
+            מייצר וידאו קולנועי מהפרומפט שלך, עם אפשרות לתמונת רפרנס קבועה.
           </p>
         </header>
 
@@ -171,6 +193,44 @@ export default function LtxPage() {
                 marginBottom: 12,
               }}
             />
+
+            {/* העלאת תמונה */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", marginBottom: 6, fontSize: 14 }}>
+                תמונת רפרנס (אופציונלי):
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                style={{ 
+                  marginBottom: 8,
+                  color: "#f9fafb",
+                  fontSize: 13,
+                }}
+              />
+              {imagePreview && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: 8,
+                    borderRadius: 10,
+                    background: "#020617",
+                    border: "1px solid #1f2937",
+                    maxWidth: 260,
+                  }}
+                >
+                  <p style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
+                    התמונה תשמש לשמירה על סגנון אחיד בין כל הפריימים.
+                  </p>
+                  <img
+                    src={imagePreview}
+                    alt="Reference"
+                    style={{ width: "100%", borderRadius: 8 }}
+                  />
+                </div>
+              )}
+            </div>
 
             <div
               style={{
@@ -275,13 +335,18 @@ export default function LtxPage() {
                   style={{ 
                     fontSize: 13, 
                     opacity: 0.8, 
-                    marginBottom: 8,
+                    marginBottom: 4,
                     wordBreak: "break-word",
                     overflowWrap: "break-word",
                   }}
                 >
                   {currentVideo.prompt}
                 </p>
+                {currentVideo.used_image && (
+                  <p style={{ fontSize: 11, color: "#a7f3d0", marginBottom: 8 }}>
+                    (נוצר עם תמונת רפרנס)
+                  </p>
+                )}
                 <div style={{ 
                   position: "relative",
                   width: "100%",
@@ -379,6 +444,7 @@ export default function LtxPage() {
                     </div>
                     <div style={{ fontSize: 11, opacity: 0.7 }}>
                       {new Date(v.createdAt).toLocaleString("he-IL")}
+                      {v.used_image ? " · עם תמונה" : ""}
                     </div>
                   </div>
                   <button
