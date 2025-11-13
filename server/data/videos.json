@@ -1,1 +1,17 @@
-﻿[]
+[
+  {
+    "id": "1763037664761",
+    "prompt": "4k ultra hd A dramatic 15-second cinematic scene of a man leaving his home at night, walking away from his wife in the distance. Heavy rain pours down as the man slowly walks forward with a suitcase in his hand, illuminated by streetlights and reflections on the wet ground. The wife stands behind in the doorway, emotional and heartbroken, watching him walk away. Add subtle slow motion for emotional impact. The camera follows the man from behind and slightly to the side. Include the Hebrew text “עכשיו זה נגמר” appearing clearly and aesthetically in the frame, in a dramatic white or neon-glow style. Ultra-realistic, 4K quality, dark mood, cinematic lighting, emotional atmosphere.",
+    "file": "69f06a60a2c04ddfb6396d649cb64dff.mp4",
+    "url": "https://rmo5wr1h48d38t-8000.proxy.runpod.net/videos/69f06a60a2c04ddfb6396d649cb64dff.mp4",
+    "createdAt": "2025-11-13T12:41:04.761Z",
+    "params": {
+      "prompt": "4k ultra hd A dramatic 15-second cinematic scene of a man leaving his home at night, walking away from his wife in the distance. Heavy rain pours down as the man slowly walks forward with a suitcase in his hand, illuminated by streetlights and reflections on the wet ground. The wife stands behind in the doorway, emotional and heartbroken, watching him walk away. Add subtle slow motion for emotional impact. The camera follows the man from behind and slightly to the side. Include the Hebrew text “עכשיו זה נגמר” appearing clearly and aesthetically in the frame, in a dramatic white or neon-glow style. Ultra-realistic, 4K quality, dark mood, cinematic lighting, emotional atmosphere.",
+      "num_frames": 81,
+      "width": 768,
+      "height": 512,
+      "fps": 24,
+      "num_inference_steps": 28
+    }
+  }
+]

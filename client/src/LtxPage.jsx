@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL 
   ? `${import.meta.env.VITE_API_BASE_URL}/api/ltx`
-  : "http://localhost:4000/api/ltx";
+  : "http://localhost:4100/api/ltx";
 
 export default function LtxPage() {
   const [prompt, setPrompt] = useState(
@@ -61,7 +61,17 @@ export default function LtxPage() {
 
       const data = await res.json();
       setCurrentVideo(data);
-      setHistory((prev) => [data, ...prev]);
+      
+      // רענון ההיסטוריה מהשרת כדי להבטיח סינכרון
+      await fetchHistory();
+      
+      // גלילה חלקה לסרטון שנוצר
+      setTimeout(() => {
+        const videoElement = document.querySelector('video');
+        if (videoElement) {
+          videoElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
     } catch (e) {
       console.error(e);
       setError(e.message || "Error generating video");
@@ -94,16 +104,24 @@ export default function LtxPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#050816",
-        color: "#f9fafb",
-        fontFamily: "system-ui, sans-serif",
-        padding: "24px",
-      }}
-    >
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          main[data-ltx-main] {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#050816",
+          color: "#f9fafb",
+          fontFamily: "system-ui, sans-serif",
+          padding: "24px",
+        }}
+      >
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <header style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 32, marginBottom: 8 }}>
             KRSTUDIO AI VISION – LTX Video
@@ -113,7 +131,14 @@ export default function LtxPage() {
           </p>
         </header>
 
-        <main style={{ display: "grid", gap: 24, gridTemplateColumns: "2fr 1.3fr" }}>
+        <main 
+          data-ltx-main
+          style={{ 
+            display: "grid", 
+            gap: 24, 
+            gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1.3fr)",
+          }}
+        >
           {/* טופס + וידאו */}
           <section
             style={{
@@ -121,6 +146,9 @@ export default function LtxPage() {
               borderRadius: 16,
               padding: 20,
               boxShadow: "0 10px 25px rgba(0,0,0,0.45)",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
             <h2 style={{ fontSize: 22, marginBottom: 12 }}>יצירת וידאו חדש</h2>
@@ -235,25 +263,52 @@ export default function LtxPage() {
             )}
 
             {currentVideo && (
-              <div style={{ marginTop: 24 }}>
+              <div 
+                id="video-result"
+                style={{ 
+                  marginTop: 24,
+                  overflow: "hidden",
+                }}
+              >
                 <h3 style={{ fontSize: 18, marginBottom: 8 }}>תוצאה אחרונה</h3>
-                <p style={{ fontSize: 13, opacity: 0.8, marginBottom: 8 }}>
+                <p 
+                  style={{ 
+                    fontSize: 13, 
+                    opacity: 0.8, 
+                    marginBottom: 8,
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                  }}
+                >
                   {currentVideo.prompt}
                 </p>
-                <video
-                  key={currentVideo.id}
-                  src={currentVideo.url}
-                  controls
-                  autoPlay
-                  loop
-                  style={{
-                    width: "100%",
-                    maxHeight: 480,
-                    borderRadius: 12,
-                    border: "1px solid #1f2937",
-                    background: "black",
-                  }}
-                />
+                <div style={{ 
+                  position: "relative",
+                  width: "100%",
+                  maxHeight: "480px",
+                  borderRadius: 12,
+                  border: "1px solid #1f2937",
+                  background: "black",
+                  overflow: "hidden",
+                }}>
+                  <video
+                    key={currentVideo.id}
+                    src={currentVideo.url}
+                    controls
+                    autoPlay
+                    loop
+                    style={{
+                      width: "100%",
+                      height: "auto",
+                      maxHeight: "480px",
+                      display: "block",
+                    }}
+                    onError={(e) => {
+                      console.error("Video load error:", e);
+                      setError("שגיאה בטעינת הווידאו");
+                    }}
+                  />
+                </div>
               </div>
             )}
           </section>
@@ -265,6 +320,9 @@ export default function LtxPage() {
               borderRadius: 16,
               padding: 16,
               boxShadow: "0 10px 25px rgba(0,0,0,0.45)",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
             <h2 style={{ fontSize: 20, marginBottom: 10 }}>היסטוריית וידאו</h2>
@@ -345,8 +403,9 @@ export default function LtxPage() {
             </div>
           </section>
         </main>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
