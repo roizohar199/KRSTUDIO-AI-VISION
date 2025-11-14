@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 // DEV: פונה לשרת לוקאלי
 // PROD: פונה לנתיב יחסי בדומיין (nginx יעביר ל-Node)
@@ -19,9 +19,11 @@ export default function LtxPage() {
   const [imageBase64, setImageBase64] = useState(null);
 
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [currentVideo, setCurrentVideo] = useState(null);
   const [history, setHistory] = useState([]);
+  const progressIntervalRef = useRef(null);
 
   async function fetchHistory() {
     try {
@@ -38,6 +40,13 @@ export default function LtxPage() {
 
   useEffect(() => {
     fetchHistory();
+    
+    // ניקוי interval בעת unmount
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
   }, []);
 
   function handleFileChange(e) {
@@ -60,6 +69,17 @@ export default function LtxPage() {
   async function handleGenerate() {
     setLoading(true);
     setError("");
+    setProgress(0);
+
+    // התחלת progress bar מדומה (מתחיל מ-5% ומגיע עד 90% בזמן ההמתנה)
+    let currentProgress = 5;
+    progressIntervalRef.current = setInterval(() => {
+      if (currentProgress < 90) {
+        currentProgress += Math.random() * 3; // התקדמות אקראית בין 0-3%
+        if (currentProgress > 90) currentProgress = 90;
+        setProgress(Math.floor(currentProgress));
+      }
+    }, 500);
 
     try {
       const res = await fetch(`${API_BASE}/generate`, {
@@ -77,11 +97,45 @@ export default function LtxPage() {
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Status ${res.status}`);
+        let errorMessage = "שגיאה ביצירת הווידאו";
+        
+        try {
+          const errorData = await res.json();
+          if (errorData.error) {
+            // בדיקה אם זו שגיאת RunPod
+            if (errorData.error.includes("LTX backend failed") || errorData.error.includes("RunPod") || res.status === 500) {
+              errorMessage = "שגיאה בשרת RunPod: השרת לא זמין כרגע או שיש בעיה בחיבור. אנא נסה שוב בעוד כמה רגעים.";
+            } else if (errorData.error.includes("prompt")) {
+              errorMessage = "שגיאה בפרומפט: " + errorData.error;
+            } else {
+              errorMessage = errorData.error;
+            }
+          }
+        } catch {
+          // אם לא ניתן לפרסר JSON, ננסה טקסט
+          const text = await res.text().catch(() => "");
+          if (text) {
+            if (text.includes("RunPod") || text.includes("LTX") || res.status === 500) {
+              errorMessage = "שגיאה בשרת RunPod: השרת לא זמין כרגע. אנא נסה שוב בעוד כמה רגעים.";
+            } else {
+              errorMessage = text || `שגיאת שרת (קוד ${res.status})`;
+            }
+          } else {
+            errorMessage = `שגיאת שרת (קוד ${res.status})`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await res.json();
+      
+      // השלמת ה-progress bar ל-100%
+      setProgress(100);
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      
       setCurrentVideo(data);
       
       // רענון ההיסטוריה מהשרת כדי להבטיח סינכרון
@@ -94,9 +148,22 @@ export default function LtxPage() {
           videoElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
       }, 100);
+      
+      // איפוס ה-progress אחרי שנייה
+      setTimeout(() => setProgress(0), 1000);
     } catch (e) {
       console.error(e);
-      setError(e.message || "Error generating video");
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      setProgress(0);
+      
+      // הודעת שגיאה ברורה
+      let errorMessage = e.message || "שגיאה ביצירת הווידאו";
+      if (e.message.includes("Failed to fetch") || e.message.includes("NetworkError")) {
+        errorMessage = "שגיאת חיבור: לא ניתן להתחבר לשרת. אנא בדוק את החיבור לאינטרנט ונסה שוב.";
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -144,6 +211,55 @@ export default function LtxPage() {
         }}
       >
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        {/* לוגו KRSTUDIO וקישור חזרה */}
+        <div style={{ 
+          display: "flex", 
+          justifyContent: "space-between", 
+          alignItems: "center",
+          marginBottom: 24,
+          flexWrap: "wrap",
+          gap: 16
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              fontSize: 28,
+              fontWeight: 700,
+              background: "linear-gradient(135deg, #6366f1, #ec4899, #f97316)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+              letterSpacing: "0.5px"
+            }}>
+              KRSTUDIO
+            </div>
+          </div>
+          <a 
+            href="/" 
+            style={{
+              padding: "8px 16px",
+              borderRadius: 8,
+              background: "#1f2937",
+              color: "#f9fafb",
+              textDecoration: "none",
+              fontSize: 14,
+              border: "1px solid #374151",
+              transition: "all 0.2s",
+              cursor: "pointer",
+              display: "inline-block"
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = "#374151";
+              e.target.style.borderColor = "#4f46e5";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = "#1f2937";
+              e.target.style.borderColor = "#374151";
+            }}
+          >
+            ← חזרה לדף הבית
+          </a>
+        </div>
+        
         <header style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 32, marginBottom: 8 }}>
             KRSTUDIO AI VISION – LTX Video
@@ -313,13 +429,81 @@ export default function LtxPage() {
                 fontWeight: 600,
                 cursor: loading ? "wait" : "pointer",
                 opacity: loading ? 0.7 : 1,
+                width: "100%",
               }}
             >
               {loading ? "מייצר וידאו..." : "Generate Video"}
             </button>
 
+            {/* Progress Bar */}
+            {loading && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                  fontSize: 14,
+                }}>
+                  <span style={{ opacity: 0.8 }}>מתקדם...</span>
+                  <span style={{ 
+                    fontWeight: 600,
+                    background: "linear-gradient(135deg, #6366f1, #ec4899)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                  }}>
+                    {progress}%
+                  </span>
+                </div>
+                <div style={{
+                  width: "100%",
+                  height: 8,
+                  background: "#1f2937",
+                  borderRadius: 999,
+                  overflow: "hidden",
+                  border: "1px solid #374151",
+                }}>
+                  <div style={{
+                    width: `${progress}%`,
+                    height: "100%",
+                    background: "linear-gradient(90deg, #6366f1, #ec4899, #f97316)",
+                    borderRadius: 999,
+                    transition: "width 0.3s ease",
+                    boxShadow: "0 0 10px rgba(99, 102, 241, 0.5)",
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* הודעת שגיאה משופרת */}
             {error && (
-              <p style={{ color: "#fecaca", marginTop: 8 }}>שגיאה: {error}</p>
+              <div style={{ 
+                marginTop: 16,
+                padding: "12px 16px",
+                borderRadius: 10,
+                background: "#7f1d1d",
+                border: "1px solid #991b1b",
+                color: "#fecaca",
+              }}>
+                <div style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  gap: 8,
+                  marginBottom: 4,
+                }}>
+                  <span style={{ fontSize: 18 }}>⚠️</span>
+                  <strong style={{ fontSize: 14 }}>שגיאה:</strong>
+                </div>
+                <p style={{ 
+                  margin: 0, 
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  wordBreak: "break-word",
+                }}>
+                  {error}
+                </p>
+              </div>
             )}
 
             {currentVideo && (

@@ -70,11 +70,36 @@ router.post("/generate", async (req, res) => {
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      console.error("RunPod LTX error:", response.status, text);
+      let errorText = "";
+      try {
+        errorText = await response.text();
+      } catch (e) {
+        errorText = "";
+      }
+      
+      console.error("RunPod LTX error:", response.status, errorText);
+      
+      // הודעות שגיאה ברורות יותר לפי סטטוס
+      let errorMessage = "שגיאה בשרת RunPod";
+      if (response.status === 500 || response.status === 503) {
+        errorMessage = "LTX backend failed - השרת לא זמין כרגע או שיש בעיה בחיבור";
+      } else if (response.status === 504 || response.status === 408) {
+        errorMessage = "LTX backend timeout - השרת לא הגיב בזמן. נסה שוב";
+      } else if (response.status === 429) {
+        errorMessage = "LTX backend rate limit - יותר מדי בקשות. אנא המתן";
+      } else if (response.status === 400) {
+        errorMessage = "LTX backend bad request - בקשה לא תקינה";
+      } else if (response.status === 502) {
+        errorMessage = "LTX backend bad gateway - בעיה בחיבור לשרת RunPod";
+      }
+      
       return res
         .status(500)
-        .json({ error: "LTX backend failed", status: response.status });
+        .json({ 
+          error: errorMessage,
+          status: response.status,
+          details: errorText || "No additional details"
+        });
     }
 
     const data = await response.json(); // { file, url, used_image }
@@ -97,7 +122,21 @@ router.post("/generate", async (req, res) => {
     return res.json(record);
   } catch (err) {
     console.error("Error in /api/ltx/generate:", err);
-    return res.status(500).json({ error: "Server error" });
+    
+    // זיהוי סוגי שגיאות נפוצים
+    let errorMessage = "Server error";
+    if (err.message && err.message.includes("fetch")) {
+      errorMessage = "שגיאת חיבור לשרת RunPod - לא ניתן להתחבר לשרת";
+    } else if (err.message && err.message.includes("timeout")) {
+      errorMessage = "שגיאת timeout - השרת לא הגיב בזמן";
+    } else if (err.message) {
+      errorMessage = `Server error: ${err.message}`;
+    }
+    
+    return res.status(500).json({ 
+      error: errorMessage,
+      details: err.message || "Unknown error"
+    });
   }
 });
 
