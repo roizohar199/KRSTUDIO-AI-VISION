@@ -107,7 +107,14 @@ export default function VideoPage() {
         clearInterval(progressIntervalRef.current);
       }
       
-      setCurrentVideo(data);
+      // תמיכה בפורמט החדש (video) והישן (url)
+      const videoData = {
+        ...data,
+        url: data.video || data.url, // תאימות לאחור
+        model: data.model || "ltx",
+      };
+      
+      setCurrentVideo(videoData);
       
       // גלילה חלקה לסרטון שנוצר
       setTimeout(() => {
@@ -523,8 +530,8 @@ export default function VideoPage() {
                   overflow: "hidden",
                 }}>
                   <video
-                    key={currentVideo.filename}
-                    src={currentVideo.url}
+                    key={currentVideo.filename || currentVideo.url}
+                    src={currentVideo.url || currentVideo.video}
                     controls
                     autoPlay
                     loop

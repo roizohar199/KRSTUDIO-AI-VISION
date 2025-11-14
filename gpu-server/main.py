@@ -2,7 +2,7 @@
 import base64
 import os
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -19,31 +19,15 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 class GenerateRequest(BaseModel):
     prompt: str
+    num_frames: int = 49
+    fps: int = 24
+    width: int = 512
+    height: int = 512
+    # פרמטרים אופציונליים נוספים
     negative_prompt: Optional[str] = ""
-    model: Literal["ltx", "mochi", "cogvideo"]
-    # seconds & fps → נהפוך לפריימים
-    seconds: int = 15
-    fps: int = 10
-    width: int = 3840   # 4K
-    height: int = 2160  # 4K
-    num_inference_steps: int = 50
-    guidance_scale: float = 6.0
+    num_inference_steps: Optional[int] = None
+    guidance_scale: Optional[float] = None
     seed: Optional[int] = None
-
-
-class GenerateResponse(BaseModel):
-    model: str
-    filename: str
-    video_base64: str
-    mime_type: str = "video/mp4"
-    fps: int
-    seconds: float
-
-
-def _clamp_frames(seconds: int, fps: int) -> int:
-    frames = seconds * fps
-    # רוב המודלים עובדים טוב עד ~161 פריימים
-    return min(frames, 161)
 
 
 def _pick_seed(seed: Optional[int]) -> int:
@@ -51,72 +35,97 @@ def _pick_seed(seed: Optional[int]) -> int:
     return seed if seed is not None else random.randint(0, 2**31 - 1)
 
 
-def _encode_video_to_base64(path: Path) -> str:
+def _encode_video_to_data_url(path: Path, mime_type: str = "video/mp4") -> str:
+    """ממיר וידאו ל-data URL"""
     with open(path, "rb") as f:
         data = f.read()
-    return base64.b64encode(data).decode("ascii")
+    b64 = base64.b64encode(data).decode("ascii")
+    return f"data:{mime_type};base64,{b64}"
 
 
-@app.post("/generate", response_model=GenerateResponse)
-def generate_video(req: GenerateRequest):
+def _generate_video_common(
+    model_name: str,
+    generate_func,
+    req: GenerateRequest,
+) -> dict:
+    """פונקציה משותפת ליצירת וידאו"""
     seed = _pick_seed(req.seed)
-    num_frames = _clamp_frames(req.seconds, req.fps)
-
+    
+    # פרמטרים ברירת מחדל אם לא צוינו
+    num_inference_steps = req.num_inference_steps or 50
+    guidance_scale = req.guidance_scale or 6.0
+    
     try:
-        if req.model == "ltx":
-            out_path = generate_ltx_video(
-                prompt=req.prompt,
-                negative_prompt=req.negative_prompt or "",
-                width=req.width,
-                height=req.height,
-                num_frames=num_frames,
-                fps=req.fps,
-                num_inference_steps=req.num_inference_steps,
-                guidance_scale=req.guidance_scale,
-                seed=seed,
-                out_dir=OUTPUT_DIR,
-            )
-        elif req.model == "mochi":
-            out_path = generate_mochi_video(
-                prompt=req.prompt,
-                negative_prompt=req.negative_prompt or "",
-                width=req.width,
-                height=req.height,
-                num_frames=num_frames,
-                fps=req.fps,
-                num_inference_steps=req.num_inference_steps,
-                guidance_scale=req.guidance_scale,
-                seed=seed,
-                out_dir=OUTPUT_DIR,
-            )
-        elif req.model == "cogvideo":
-            out_path = generate_cogvideo_video(
-                prompt=req.prompt,
-                negative_prompt=req.negative_prompt or "",
-                width=req.width,
-                height=req.height,
-                num_frames=num_frames,
-                fps=req.fps,
-                num_inference_steps=req.num_inference_steps,
-                guidance_scale=req.guidance_scale,
-                seed=seed,
-                out_dir=OUTPUT_DIR,
-            )
-        else:
-            raise HTTPException(status_code=400, detail="Unknown model")
+        out_path = generate_func(
+            prompt=req.prompt,
+            negative_prompt=req.negative_prompt or "",
+            width=req.width,
+            height=req.height,
+            num_frames=req.num_frames,
+            fps=req.fps,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            seed=seed,
+            out_dir=OUTPUT_DIR,
+        )
+        
+        video_data_url = _encode_video_to_data_url(out_path)
+        
+        return {
+            "success": True,
+            "video": video_data_url,
+            "model": model_name,
+            "filename": out_path.name,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    b64 = _encode_video_to_base64(out_path)
-    seconds_real = num_frames / req.fps
 
-    return GenerateResponse(
-        model=req.model,
-        filename=out_path.name,
-        video_base64=b64,
-        fps=req.fps,
-        seconds=seconds_real,
+@app.post("/generate/ltx")
+def generate_ltx(req: GenerateRequest):
+    """יצירת וידאו עם LTX"""
+    return _generate_video_common("ltx", generate_ltx_video, req)
+
+
+@app.post("/generate/mochi")
+def generate_mochi(req: GenerateRequest):
+    """יצירת וידאו עם Mochi"""
+    return _generate_video_common("mochi", generate_mochi_video, req)
+
+
+@app.post("/generate/cog")
+def generate_cog(req: GenerateRequest):
+    """יצירת וידאו עם CogVideoX"""
+    return _generate_video_common("cogvideo", generate_cogvideo_video, req)
+
+
+# תאימות לאחור - endpoint אחד עם פרמטר model
+@app.post("/generate")
+def generate_video_legacy(req: dict):
+    """Legacy endpoint - תאימות לאחור"""
+    model = req.get("model", "ltx")
+    
+    # המרת request לפורמט החדש
+    generate_req = GenerateRequest(
+        prompt=req.get("prompt", ""),
+        num_frames=req.get("num_frames", 49),
+        fps=req.get("fps", 24),
+        width=req.get("width", 512),
+        height=req.get("height", 512),
+        negative_prompt=req.get("negative_prompt", ""),
+        num_inference_steps=req.get("num_inference_steps"),
+        guidance_scale=req.get("guidance_scale"),
+        seed=req.get("seed"),
     )
+    
+    if model == "ltx":
+        return _generate_video_common("ltx", generate_ltx_video, generate_req)
+    elif model == "mochi":
+        return _generate_video_common("mochi", generate_mochi_video, generate_req)
+    elif model in ["cogvideo", "cog"]:
+        return _generate_video_common("cogvideo", generate_cogvideo_video, generate_req)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model}")
 
 
 if __name__ == "__main__":

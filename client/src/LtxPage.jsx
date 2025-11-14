@@ -136,7 +136,13 @@ export default function LtxPage() {
         clearInterval(progressIntervalRef.current);
       }
       
-      setCurrentVideo(data);
+      // תמיכה בפורמט החדש (video) והישן (url)
+      const videoData = {
+        ...data,
+        url: data.video || data.url, // תאימות לאחור
+      };
+      
+      setCurrentVideo(videoData);
       
       // רענון ההיסטוריה מהשרת כדי להבטיח סינכרון
       await fetchHistory();

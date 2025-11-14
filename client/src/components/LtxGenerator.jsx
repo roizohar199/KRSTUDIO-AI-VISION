@@ -1,9 +1,12 @@
 import { useState } from "react";
 
-const API_BASE = import.meta.env.VITE_GPU_SERVER_URL || "https://rmo5wr1h48d38t-8000.proxy.runpod.net";
+// DEV: פונה לשרת לוקאלי
+// PROD: פונה לנתיב יחסי בדומיין (nginx יעביר ל-Node)
+const API_BASE =
+  import.meta.env.DEV ? "http://localhost:4100/api/ltx" : "/api/ltx";
 
 async function generateVideo(prompt) {
-  const res = await fetch(`${API_BASE}/generate`, {
+  const res = await fetch(`${API_BASE}/generate-video`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -15,8 +18,14 @@ async function generateVideo(prompt) {
     })
   });
 
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+    throw new Error(errorData.error || "Failed to generate video");
+  }
+
   const data = await res.json();
-  return `${API_BASE}${data.url}`;
+  // השרת מחזיר url ישירות (data URL או URL אחר)
+  return data.url || data.video;
 }
 
 export default function LtxGenerator() {

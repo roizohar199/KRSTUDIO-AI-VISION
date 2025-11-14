@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 
+// DEV: פונה לשרת לוקאלי
+// PROD: פונה לנתיב יחסי בדומיין (nginx יעביר ל-Node)
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+  import.meta.env.DEV ? "http://localhost:4100" : "";
 
 export default function PromptForm({ type, onResult }) {
   const [prompt, setPrompt] = useState("");
