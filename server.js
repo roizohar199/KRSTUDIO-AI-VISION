@@ -14,7 +14,8 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 4100;
-const LTX_SERVER = process.env.LTX_SERVER; // כתובת ה-GPU שלך (RunPod)
+const GPU_SERVER = process.env.GPU_SERVER || process.env.LTX_SERVER; // כתובת ה-GPU שלך (RunPod) - תומך ב-3 מודלים
+const LTX_SERVER = process.env.LTX_SERVER || GPU_SERVER; // תאימות לאחור
 const SDXL_SERVER = process.env.SDXL_SERVER || null; // אם תרצה שרת נפרד ל-SDXL
 
 /**
@@ -111,39 +112,69 @@ app.get("/api/ltx/health", (req, res) => {
   res.json({
     ok: true,
     queueSize: videoQueue.length,
-    gpu: LTX_SERVER || null
+    gpu: GPU_SERVER || null
+  });
+});
+
+app.get("/api/video/health", (req, res) => {
+  res.json({
+    ok: true,
+    queueSize: videoQueue.length,
+    gpu: GPU_SERVER || null,
+    models: ["ltx", "mochi", "cogvideo"]
   });
 });
 
 /**
  * ============================
- *  1) Generate Video (LTX)
- *  Route: POST /api/ltx/generate-video
+ *  1) Generate Video (Multi-Model Support)
+ *  Route: POST /api/video/generate
+ *  Supports: ltx, mochi, cogvideo
  * ============================
  */
 
-app.post("/api/ltx/generate-video", requireAuth, async (req, res) => {
-  const { prompt, num_frames, fps, height, width } = req.body || {};
+app.post("/api/video/generate", requireAuth, async (req, res) => {
+  const { 
+    prompt, 
+    model = "ltx",
+    negative_prompt = "",
+    seconds = 15,
+    fps = 10,
+    width = 3840,
+    height = 2160,
+    num_inference_steps = 50,
+    guidance_scale = 6.0,
+    seed = null
+  } = req.body || {};
 
   if (!prompt) {
     return res.status(400).json({ error: "prompt is required" });
   }
 
-  if (!LTX_SERVER) {
-    return res.status(500).json({ error: "LTX_SERVER not configured on server" });
+  if (!["ltx", "mochi", "cogvideo"].includes(model)) {
+    return res.status(400).json({ error: "model must be one of: ltx, mochi, cogvideo" });
+  }
+
+  if (!GPU_SERVER) {
+    return res.status(500).json({ error: "GPU_SERVER not configured on server" });
   }
 
   try {
     const result = await enqueueJob(async () => {
-      const gpuRes = await fetch(LTX_SERVER, {
+      const gpuRes = await fetch(`${GPU_SERVER}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          num_frames: num_frames || 49,
-          fps: fps || 24,
-          height: height || 512,
-          width: width || 512
+          negative_prompt,
+          model,
+          seconds,
+          fps,
+          width,
+          height,
+          num_inference_steps,
+          guidance_scale,
+          seed
         })
       });
 
@@ -152,7 +183,14 @@ app.post("/api/ltx/generate-video", requireAuth, async (req, res) => {
         throw new Error(`GPU error: ${txt}`);
       }
 
-      return gpuRes.json();
+      const data = await gpuRes.json();
+      
+      // המרת base64 ל-URL data
+      return {
+        ...data,
+        url: `data:${data.mime_type};base64,${data.video_base64}`,
+        model: data.model
+      };
     });
 
     return res.json(result);
@@ -160,7 +198,70 @@ app.post("/api/ltx/generate-video", requireAuth, async (req, res) => {
     console.error("SERVER ERROR (video):", err);
     return res
       .status(500)
-      .json({ error: "server error", details: String(err), gpu: LTX_SERVER });
+      .json({ error: "server error", details: String(err), gpu: GPU_SERVER });
+  }
+});
+
+/**
+ * ============================
+ *  1a) Generate Video (LTX) - Legacy endpoint for backward compatibility
+ *  Route: POST /api/ltx/generate-video
+ * ============================
+ */
+
+app.post("/api/ltx/generate-video", requireAuth, async (req, res) => {
+  const { prompt, num_frames, fps, height, width, num_inference_steps, guidance_scale, seed } = req.body || {};
+
+  if (!prompt) {
+    return res.status(400).json({ error: "prompt is required" });
+  }
+
+  if (!GPU_SERVER) {
+    return res.status(500).json({ error: "GPU_SERVER not configured on server" });
+  }
+
+  try {
+    const result = await enqueueJob(async () => {
+      // המרת פרמטרים ישנים לפורמט החדש
+      const seconds = Math.ceil((num_frames || 49) / (fps || 24));
+      
+      const gpuRes = await fetch(`${GPU_SERVER}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          model: "ltx",
+          seconds,
+          fps: fps || 24,
+          width: width || 512,
+          height: height || 512,
+          num_inference_steps: num_inference_steps || 50,
+          guidance_scale: guidance_scale || 6.0,
+          seed
+        })
+      });
+
+      if (!gpuRes.ok) {
+        const txt = await gpuRes.text();
+        throw new Error(`GPU error: ${txt}`);
+      }
+
+      const data = await gpuRes.json();
+      
+      // המרת base64 ל-URL data
+      return {
+        ...data,
+        url: `data:${data.mime_type};base64,${data.video_base64}`,
+        model: "ltx"
+      };
+    });
+
+    return res.json(result);
+  } catch (err) {
+    console.error("SERVER ERROR (video):", err);
+    return res
+      .status(500)
+      .json({ error: "server error", details: String(err), gpu: GPU_SERVER });
   }
 });
 
@@ -226,13 +327,13 @@ app.post("/api/ltx/generate-video-from-image", requireAuth, async (req, res) => 
     return res.status(400).json({ error: "prompt and imageUrl are required" });
   }
 
-  if (!LTX_SERVER) {
-    return res.status(500).json({ error: "LTX_SERVER not configured on server" });
+  if (!GPU_SERVER) {
+    return res.status(500).json({ error: "GPU_SERVER not configured on server" });
   }
 
   try {
     const result = await enqueueJob(async () => {
-      const gpuRes = await fetch(LTX_SERVER, {
+      const gpuRes = await fetch(GPU_SERVER, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -258,7 +359,7 @@ app.post("/api/ltx/generate-video-from-image", requireAuth, async (req, res) => 
     console.error("SERVER ERROR (image->video):", err);
     return res
       .status(500)
-      .json({ error: "server error", details: String(err), gpu: LTX_SERVER });
+      .json({ error: "server error", details: String(err), gpu: GPU_SERVER });
   }
 });
 
@@ -276,13 +377,13 @@ app.post("/api/external/generate-video", apiKeyGuard, async (req, res) => {
     return res.status(400).json({ error: "prompt is required" });
   }
 
-  if (!LTX_SERVER) {
-    return res.status(500).json({ error: "LTX_SERVER not configured on server" });
+  if (!GPU_SERVER) {
+    return res.status(500).json({ error: "GPU_SERVER not configured on server" });
   }
 
   try {
     const result = await enqueueJob(async () => {
-      const gpuRes = await fetch(LTX_SERVER, {
+      const gpuRes = await fetch(GPU_SERVER, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -307,7 +408,7 @@ app.post("/api/external/generate-video", apiKeyGuard, async (req, res) => {
     console.error("SERVER ERROR (external video):", err);
     return res
       .status(500)
-      .json({ error: "server error", details: String(err), gpu: LTX_SERVER });
+      .json({ error: "server error", details: String(err), gpu: GPU_SERVER });
   }
 });
 
