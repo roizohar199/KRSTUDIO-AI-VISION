@@ -1,7 +1,7 @@
-import LtxPage from "./LtxPage";
+import VideoGenerator from "./pages/VideoGenerator";
 
 function App() {
-  return <LtxPage />;
+  return <VideoGenerator />;
 }
 
 export default App;
