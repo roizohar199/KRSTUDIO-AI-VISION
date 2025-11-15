@@ -5,7 +5,7 @@ import App from "./App";
 import VideoPage from "./VideoPage";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <BrowserRouter basename="/ltx">
+  <BrowserRouter>
     <Routes>
       <Route path="/" element={<App />} />
       <Route path="/video" element={<VideoPage />} />

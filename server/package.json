@@ -1,7 +1,7 @@
 {
   "name": "krstudio-ai-vision",
   "version": "1.0.0",
-  "description": "KRSTUDIO AI VISION - LTX Video/Image backend",
+  "description": "KRSTUDIO AI VISION - Video/Image backend",
   "main": "server.js",
   "type": "module",
   "scripts": {

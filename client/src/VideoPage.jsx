@@ -6,7 +6,7 @@ const API_BASE =
   import.meta.env.DEV ? "http://localhost:4100/api/video" : "/api/video";
 
 export default function VideoPage() {
-  const [model, setModel] = useState("ltx");
+  const [model, setModel] = useState("mochi");
   const [prompt, setPrompt] = useState(
     "4k ultra hd cinematic video of a man walking away in the rain, dramatic lighting"
   );
@@ -111,7 +111,7 @@ export default function VideoPage() {
       const videoData = {
         ...data,
         url: data.video || data.url, // תאימות לאחור
-        model: data.model || "ltx",
+        model: data.model || "mochi",
       };
       
       setCurrentVideo(videoData);
@@ -154,7 +154,6 @@ export default function VideoPage() {
   };
 
   const modelInfo = {
-    ltx: { name: "LTX Video", desc: "מודל Lightricks ליצירת וידאו קולנועי" },
     mochi: { name: "Mochi 1", desc: "מודל Genmo ליצירת וידאו איכותי" },
     cogvideo: { name: "CogVideoX", desc: "מודל THUDM ליצירת וידאו מתקדם" },
   };
@@ -232,7 +231,7 @@ export default function VideoPage() {
             KRSTUDIO AI VISION – Multi-Model Video Generation
           </h1>
           <p style={{ opacity: 0.8 }}>
-            מייצר וידאו קולנועי מהפרומפט שלך עם 3 מודלים שונים: LTX, Mochi 1, ו-CogVideoX.
+            מייצר וידאו קולנועי מהפרומפט שלך עם 2 מודלים שונים: Mochi 1 ו-CogVideoX.
           </p>
         </header>
 
@@ -272,7 +271,6 @@ export default function VideoPage() {
                   cursor: "pointer",
                 }}
               >
-                <option value="ltx">LTX Video</option>
                 <option value="mochi">Mochi 1 (Genmo)</option>
                 <option value="cogvideo">CogVideoX (THUDM)</option>
               </select>

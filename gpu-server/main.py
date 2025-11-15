@@ -7,7 +7,6 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from ltx_pipeline import generate_ltx_video
 from mochi_pipeline import generate_mochi_video
 from cogvideo_pipeline import generate_cogvideo_video
 
@@ -81,12 +80,6 @@ def _generate_video_common(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/generate/ltx")
-def generate_ltx(req: GenerateRequest):
-    """יצירת וידאו עם LTX"""
-    return _generate_video_common("ltx", generate_ltx_video, req)
-
-
 @app.post("/generate/mochi")
 def generate_mochi(req: GenerateRequest):
     """יצירת וידאו עם Mochi"""
@@ -103,7 +96,7 @@ def generate_cog(req: GenerateRequest):
 @app.post("/generate")
 def generate_video_legacy(req: dict):
     """Legacy endpoint - תאימות לאחור"""
-    model = req.get("model", "ltx")
+    model = req.get("model", "mochi")
     
     # המרת request לפורמט החדש
     generate_req = GenerateRequest(
@@ -118,14 +111,12 @@ def generate_video_legacy(req: dict):
         seed=req.get("seed"),
     )
     
-    if model == "ltx":
-        return _generate_video_common("ltx", generate_ltx_video, generate_req)
-    elif model == "mochi":
+    if model == "mochi":
         return _generate_video_common("mochi", generate_mochi_video, generate_req)
     elif model in ["cogvideo", "cog"]:
         return _generate_video_common("cogvideo", generate_cogvideo_video, generate_req)
     else:
-        raise HTTPException(status_code=400, detail=f"Unknown model: {model}")
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model}. Supported: mochi, cogvideo")
 
 
 if __name__ == "__main__":

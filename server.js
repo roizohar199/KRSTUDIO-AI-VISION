@@ -36,8 +36,6 @@ const COGVIDEO_SERVER =
   process.env.COGVIDEO_SERVER ||
   (GPU_BASE ? `${GPU_BASE}/generate/cogvideo` : null);
 
-// לצורך תאימות: "ltx" = mochi (אין יותר LTX אמיתי)
-const LTX_SERVER = MOCHI_SERVER;
 
 const SDXL_SERVER = process.env.SDXL_SERVER || null; // לעתיד – יצירת תמונה
 
@@ -122,8 +120,6 @@ async function processQueue() {
 
 function getModelEndpoint(model) {
   switch (model) {
-    // LTX הוא עכשיו alias ל-MOCHI
-    case "ltx":
     case "mochi":
       return MOCHI_SERVER;
 
@@ -148,24 +144,12 @@ app.get("/", (req, res) => {
     service: "KRSTUDIO AI VISION",
     gpuBase: GPU_BASE || null,
     endpoints: {
-      // לתאימות: ltx מצביע על mochi
-      ltx: LTX_SERVER,
       mochi: MOCHI_SERVER,
       cogvideo: COGVIDEO_SERVER,
     },
   });
 });
 
-app.get("/api/ltx/health", (req, res) => {
-  res.json({
-    ok: true,
-    queueSize: videoQueue.length,
-    gpuBase: GPU_BASE || null,
-    // לתאימות בלבד
-    ltxAliasTo: "mochi",
-    ltxEndpoint: LTX_SERVER || null,
-  });
-});
 
 app.get("/api/video/health", (req, res) => {
   res.json({
@@ -173,31 +157,18 @@ app.get("/api/video/health", (req, res) => {
     queueSize: videoQueue.length,
     gpuBase: GPU_BASE || null,
     models: {
-      ltx: !!LTX_SERVER, // alias ל-mochi
       mochi: !!MOCHI_SERVER,
       cogvideo: !!COGVIDEO_SERVER,
     },
   });
 });
 
-/**
- * ============================
- *  History endpoints (LtxPage compat)
- * ============================
- */
-app.get("/api/ltx/history", requireAuth, (req, res) => {
-  res.json([]);
-});
-
-app.delete("/api/ltx/history/:id", requireAuth, (req, res) => {
-  res.json({ ok: true, deleted: req.params.id });
-});
 
 /**
  * ============================
  *  1) Generate Video (Multi-Model Support)
  *  Route: POST /api/video/generate
- *  Supports: ltx(=mochi), mochi, cogvideo
+ *  Supports: mochi, cogvideo
  * ============================
  */
 
@@ -215,9 +186,9 @@ app.post("/api/video/generate", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "prompt is required" });
   }
 
-  if (!["ltx", "mochi", "cogvideo", "cog"].includes(model)) {
+  if (!["mochi", "cogvideo", "cog"].includes(model)) {
     return res.status(400).json({
-      error: "model must be one of: ltx, mochi, cogvideo",
+      error: "model must be one of: mochi, cogvideo",
     });
   }
 
@@ -272,149 +243,15 @@ app.post("/api/video/generate", requireAuth, async (req, res) => {
   }
 });
 
-/**
- * ============================
- *  1a) Generate Video (LTX alias → MOCHI)
- *  Route: POST /api/ltx/generate
- * ============================
- */
-
-app.post("/api/ltx/generate", requireAuth, async (req, res) => {
-  const {
-    prompt,
-    num_frames,
-    fps = 24,
-    height = 512,
-    width = 512,
-  } = req.body || {};
-
-  if (!prompt) {
-    return res.status(400).json({ error: "prompt is required" });
-  }
-
-  const endpoint = getModelEndpoint("ltx"); // alias ל-mochi
-  if (!endpoint || !GPU_BASE) {
-    return res.status(500).json({ error: "LTX (alias to mochi) not configured" });
-  }
-
-  try {
-    const frames =
-      num_frames && Number.isFinite(num_frames)
-        ? num_frames
-        : Math.round(49);
-
-    const result = await enqueueJob(async () => {
-      const gpuRes = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          num_frames: frames,
-          fps,
-          width,
-          height,
-        }),
-      });
-
-      if (!gpuRes.ok) {
-        const txt = await gpuRes.text();
-        throw new Error(`GPU error: ${txt}`);
-      }
-
-      const data = await gpuRes.json();
-      return {
-        success: data.success !== false,
-        video: data.video,
-        url: data.video, // תאימות ל-LtxPage
-        model: "mochi",
-        ltxAlias: true,
-      };
-    });
-
-    return res.json(result);
-  } catch (err) {
-    console.error("SERVER ERROR (video):", err);
-    return res
-      .status(500)
-      .json({ error: "server error", details: String(err), gpuBase: GPU_BASE });
-  }
-});
-
-/**
- * ============================
- *  1b) Generate Video (LTX legacy alias → MOCHI)
- *  Route: POST /api/ltx/generate-video
- * ============================
- */
-
-app.post("/api/ltx/generate-video", requireAuth, async (req, res) => {
-  const {
-    prompt,
-    num_frames,
-    fps = 24,
-    height = 512,
-    width = 512,
-  } = req.body || {};
-
-  if (!prompt) {
-    return res.status(400).json({ error: "prompt is required" });
-  }
-
-  const endpoint = getModelEndpoint("ltx"); // alias ל-mochi
-  if (!endpoint || !GPU_BASE) {
-    return res.status(500).json({ error: "LTX (alias to mochi) not configured" });
-  }
-
-  try {
-    const frames =
-      num_frames && Number.isFinite(num_frames)
-        ? num_frames
-        : Math.round(49);
-
-    const result = await enqueueJob(async () => {
-      const gpuRes = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          num_frames: frames,
-          fps,
-          width,
-          height,
-        }),
-      });
-
-      if (!gpuRes.ok) {
-        const txt = await gpuRes.text();
-        throw new Error(`GPU error: ${txt}`);
-      }
-
-      const data = await gpuRes.json();
-      return {
-        success: data.success !== false,
-        video: data.video,
-        model: "mochi",
-        ltxAlias: true,
-      };
-    });
-
-    return res.json(result);
-  } catch (err) {
-    console.error("SERVER ERROR (video legacy):", err);
-    return res
-      .status(500)
-      .json({ error: "server error", details: String(err), gpuBase: GPU_BASE });
-  }
-});
 
 /**
  * ============================
  *  2) Generate Image (SDXL) – placeholder
- *  Route: POST /api/ltx/generate-image
+ *  Route: POST /api/generate-image
  * ============================
  */
 
-app.post("/api/ltx/generate-image", requireAuth, async (req, res) => {
+app.post("/api/generate-image", requireAuth, async (req, res) => {
   const { prompt, width, height } = req.body || {};
 
   if (!prompt) {
@@ -454,12 +291,12 @@ app.post("/api/ltx/generate-image", requireAuth, async (req, res) => {
 /**
  * ============================
  *  3) Image → Video (Conditioning) – not yet implemented
- *  Route: POST /api/ltx/generate-video-from-image
+ *  Route: POST /api/generate-video-from-image
  * ============================
  */
 
 app.post(
-  "/api/ltx/generate-video-from-image",
+  "/api/generate-video-from-image",
   requireAuth,
   async (req, res) => {
     return res.status(501).json({
@@ -547,7 +384,7 @@ app.post("/api/external/generate-video", apiKeyGuard, async (req, res) => {
  * ============================
  */
 
-app.get("/api/ltx/admin/videos", requireAuth, requireAdmin, (req, res) => {
+app.get("/api/admin/videos", requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true, items: [] });
 });
 
